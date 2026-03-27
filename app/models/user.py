@@ -25,3 +25,5 @@ class User(Base):
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
     courses = relationship("Course", back_populates="teacher")
+    enrollments = relationship("Enrollment", back_populates="student", cascade="all, delete-orphan")
+    

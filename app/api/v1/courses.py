@@ -1,10 +1,11 @@
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.orm import Session, joinedload
+from sqlalchemy.orm import Session, joinedload ,selectinload
 from app.core.dependecies import get_db, get_current_user,require_teacher
-from app.models.course import Course
+from app.models.course import Course,Section, Lecture, Note
+from app.models.enrollment import Enrollment
 from app.models.user import User, UserRole  
 from app.schemas.course import CourseCreate, CourseResponse, CourseUpdate
-
+from app.schemas.content import SectionCreate, SectionResponse, LectureCreate, LectureResponse, NoteResponse, CourseContentResponse,NoteCreate
 
 router = APIRouter()
 
@@ -126,3 +127,113 @@ def delete_course(course_id: int, db: Session = Depends(get_db), current_user: U
     db.delete(course)
     db.commit()
     return
+
+
+# Additional endpoints for sections, lectures, and notes can be implemented similarly, ensuring proper authorization and data validation.
+@router.post("/{course_id}/sections" , response_model=CourseContentResponse,status_code=status.HTTP_200_OK)
+def create_section(
+    course_id: int,
+    section_data: SectionCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_teacher)
+):
+    course = db.query(Course).filter(Course.id == course_id).first()
+    if course is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Course not found")
+    
+    if current_user.role != UserRole.admin and course.teacher_id != current_user.id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized to add section to this course")
+    
+    new_section = Section(
+        Course_id = course_id,
+        title=section_data.title,
+        order_num =section_data.order_num    
+    )
+
+    db.add(new_section)
+    db.commit()
+    db.refresh(new_section)
+
+    return new_section
+
+@router.post("/sections/{section_id}/lectures", response_model=LectureResponse, status_code=status.HTTP_200_OK)
+def add_lecture(
+    section_id: int,
+    lecture_data: LectureCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_teacher)
+):
+    section = db.query(Section).filter(Section.id == section_id).first()
+    if section is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Section not found")
+    
+    if current_user.role != UserRole.admin and section.course.teacher_id != current_user.id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized to add lecture to this section")
+    
+    lecture = Lecture(
+        title=lecture_data.title,
+        video_url=lecture_data.video_url,
+        duration=lecture_data.duration,
+        is_preview=lecture_data.is_preview,
+        order_num=lecture_data.order_num,
+        section_id=section_id
+    )
+
+    db.add(lecture)
+    db.commit()
+    db.refresh(lecture)
+    return lecture
+
+@router.post("/sections/{section_id}/notes", response_model=NoteResponse, status_code=status.HTTP_201_CREATED)
+def add_note(
+    section_id: int,
+    note_data: NoteCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_teacher)
+):
+    section = db.query(Section).filter(Section.id == section_id).first()
+
+    if section is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Section not found")
+    
+    if current_user.role != UserRole.admin and section.course.teacher_id != current_user.id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized to add note to this section")
+    
+    note = Note(
+        title=note_data.title,
+        pdf_url=note_data.pdf_url,
+        section_id=section_id
+    )
+
+    db.add(note)
+    db.commit()
+    db.refresh(note)
+    return note
+    
+   
+@router.get("/{course_id}/content", response_model=CourseContentResponse, status_code=status.HTTP_200_OK)
+def get_course_content(course_id: int, db: Session = Depends(get_db), current_user: User  = Depends(get_current_user)):
+    course = (
+        db.query(Course)
+        .options(
+            selectinload(Course.sections).selectinload(Section.lectures),
+            selectinload(Course.sections).selectinload(Section.notes)
+        )
+        .filter(Course.id == course_id)
+        .first()
+    )
+
+    if course is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Course not found")
+    
+    if current_user.role in [UserRole.teacher, UserRole.admin]:
+        if current_user.role == UserRole.admin and course.teacher_id != current_user.id:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized to view this course content")
+    return course
+
+    enrollment = db.query(Enrollment).filter(Enrollment.course_id == course_id, Enrollment.student_id == current_user.id).first()
+
+    if enrollment is None :
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not enrolled in this course")
+    
+    return course
