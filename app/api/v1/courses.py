@@ -1,5 +1,6 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status ,Query
 from sqlalchemy.orm import Session, joinedload ,selectinload
+
 from app.core.dependecies import get_db, get_current_user,require_teacher
 from app.models.course import Course,Section, Lecture, Note
 from app.models.enrollment import Enrollment
@@ -58,6 +59,87 @@ def list_courses(
             .all()
         )
     return courses
+
+@router.get("/search", response_model=list[CourseResponse])
+def search_courses( 
+    q : str = Query(...,min_length=1),
+    db:Session = Depends(get_db)
+):
+
+    courses = (
+        db.query(Course)
+        .options(joinedload(Course.teacher))
+        .filter(
+            Course.is_published == True,
+            Course.title.ilike(f"%{q}%")   
+        )
+        .all()
+    )
+    return courses
+
+
+@router.get("/my/created", response_model=list[CourseResponse])
+def get_my_created_courses(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_teacher)
+):
+    courses = (
+        db.query(Course)
+        .options(joinedload(Course.teacher))
+        .filter(Course.teacher_id == current_user.id)
+        .all()
+    )
+    return courses
+
+@router.get("/{course_id}/publish", response_model=list[CourseResponse])
+def publish_course(
+    course_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_teacher)
+):
+    course = db.query(Course).filter(Course.id == course_id).first()
+    if not course:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Course not found")
+    
+    if course.teacher_id != current_user.id and current_user.role != UserRole.admin:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized to publish this course")
+    
+    course.is_published = True
+    db.commit()
+    db.refresh(course)
+
+    course=(
+        db.query(Course)
+        .options(joinedload(Course.teacher))
+        .filter(Course.id == course_id)
+        .first()
+    )
+    return course
+
+@router.patch("/{course_id}/unpublish", response_model=CourseResponse)
+def unpublish_course(
+    course_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_teacher)
+):
+    course = db.query(Course).filter(Course.id == course_id).first()
+    if not course:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Course not found")
+    
+    if course.teacher_id != current_user.id and current_user.role != UserRole.admin:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized to unpublish this course")
+    
+    course.is_published = False
+    db.commit()
+    db.refresh(course)
+
+    course=(
+        db.query(Course)
+        .options(joinedload(Course.teacher))
+        .filter(Course.id == course_id)
+        .first()
+    )
+    return course
 
 
 @router.get("/{course_id}", response_model=CourseResponse)
@@ -126,7 +208,7 @@ def delete_course(course_id: int, db: Session = Depends(get_db), current_user: U
     
     db.delete(course)
     db.commit()
-    return
+    return "deleted"
 
 
 # Additional endpoints for sections, lectures, and notes can be implemented similarly, ensuring proper authorization and data validation.

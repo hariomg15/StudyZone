@@ -7,7 +7,8 @@ from app.db.base import Base
 from app.db.session import engine
 import app.models
 
-Base.metadata.create_all(bind=engine)   
+# Base.metadata.create_all(bind=engine)  
+
 
 app=FastAPI(title=settings.app_name, version=settings.api_v1_str,
             description="Industry grade Caoching Platform API built with FastAPI")

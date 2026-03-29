@@ -30,10 +30,10 @@ class Section(Base):
     id = Column(Integer, primary_key=True, index=True)
     title = Column(String(255), nullable=False)
     order_num = Column(Integer, default=1)
-    Course_id = Column(Integer, ForeignKey("courses.id",ondelete="CASCADE"), nullable=False)
+    course_id = Column(Integer, ForeignKey("courses.id", ondelete="CASCADE"), nullable=False)
 
     course = relationship("Course", back_populates="sections")
-    lectures = relationship("Lecture", back_populates="section", cascade="all, delete-orphan")  
+    lectures = relationship("Lecture", back_populates="section", cascade="all, delete-orphan")
     notes = relationship("Note", back_populates="section", cascade="all, delete-orphan")
 
 class Lecture(Base):
