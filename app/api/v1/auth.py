@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 
 from app.core.dependecies import get_db, get_current_user
 from app.core.security import hash_password, create_access_token, verify_password
-from app.models.user import User
+from app.models.user import User, UserRole
 from app.schemas.user import (UserCreate, UserLogin, UserResponse, TokenResponse)
 
 router = APIRouter()
@@ -13,6 +13,12 @@ def register_user(user_data: UserCreate, db: Session = Depends(get_db)):
     existing_user = db.query(User).filter(User.email == user_data.email).first()
     if existing_user:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Email already registered")
+
+    if user_data.role in [UserRole.teacher, UserRole.admin]:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Teacher and admin accounts are created internally only",
+        )
     
     hashed_password = hash_password(user_data.password)
     new_user = User(

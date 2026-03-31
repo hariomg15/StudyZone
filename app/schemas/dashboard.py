@@ -7,7 +7,7 @@ class AdminStatsResponse(BaseModel):
     total_admins: int
     total_courses: int
     total_published_courses: int
-    total_enrollements: float
+    total_enrollments: int
 
     class Config:
-        from_attribute = True
+        from_attributes = True

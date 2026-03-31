@@ -24,7 +24,7 @@ class Teacherinfo(BaseModel):
     name: str
     email: str
     class Config:
-        from_attribute = True
+        from_attributes = True
 
 class CourseResponse(CourseBase):
     id: int
@@ -32,4 +32,4 @@ class CourseResponse(CourseBase):
     teacher: Teacherinfo
 
     class Config:
-        from_attribute = True
+        from_attributes = True

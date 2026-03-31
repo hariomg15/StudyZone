@@ -7,7 +7,7 @@ class SectionCreate(BaseModel):
 class LectureCreate(BaseModel):
     title: str = Field(..., min_length=2, max_length=255)
     video_url: str
-    duration: str | None = None  # Duration in seconds
+    duration: int | None = None  # Duration in seconds
     is_preview: bool = False
     order_num: int = 1
 
@@ -48,7 +48,7 @@ class CourseContentResponse(BaseModel):
     id: int
     title: str
     description: str | None = None
-    Sections: list[SectionResponse] = []
+    sections: list[SectionResponse] = []
 
     class Config:
          from_attributes = True

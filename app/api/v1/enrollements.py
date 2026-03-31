@@ -28,6 +28,11 @@ def enroll_in_course(course_id: int, db: Session = Depends(get_db), current_user
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Cannot enroll in an unpublished course"
         )
+    if not course.is_free:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="This is not free course. Please complete payment to access it.",
+        )
     
     #AGAR course hai toh check karenge ki user already enrolled hai ya nahi
     existing_enrollment = db.query(Enrollment).filter(Enrollment.user_id == current_user.id, Enrollment.course_id == course_id).first()
@@ -76,7 +81,7 @@ def get_course_enrollments(
             detail="Course not found"
         )
     
-    if course.teacher != UserRole.admin and course.teacher_id != current_user.id:
+    if current_user.role != UserRole.admin and course.teacher_id != current_user.id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="You do not have permission to view enrollments for this course."

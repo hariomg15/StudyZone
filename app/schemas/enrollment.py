@@ -15,7 +15,7 @@ class MyEnrollmentCourseResponse(BaseModel):
     id: int
     course: CourseResponse
 
-    class config:
+    class Config:
         from_attributes = True
 
 class EnrolledStudentInfo(BaseModel):

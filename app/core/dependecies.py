@@ -9,6 +9,7 @@ from app.models.user import User, UserRole
 
 
 oauth2_scheme = HTTPBearer()
+optional_oauth2_scheme = HTTPBearer(auto_error=False)
 
 def get_db():
     db= Sessionlocal()
@@ -36,6 +37,31 @@ def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(oauth2_
     user = db.query(User).filter(User.email == email).first()
     if user is None or not user.is_active:
         raise credentials_exception
+    return user
+
+def get_current_user_optional(
+    credentials: HTTPAuthorizationCredentials | None = Depends(optional_oauth2_scheme),
+    db: Session = Depends(get_db),
+) -> User | None:
+    if credentials is None:
+        return None
+
+    try:
+        payload = jwt.decode(
+            credentials.credentials,
+            settings.secret_key,
+            algorithms=[settings.algorithm],
+        )
+        email: str | None = payload.get("sub")
+        if email is None:
+            return None
+    except JWTError:
+        return None
+
+    user = db.query(User).filter(User.email == email).first()
+    if user is None or not user.is_active:
+        return None
+
     return user
 
 def require_teacher(current_user: User = Depends(get_current_user)) -> User:
