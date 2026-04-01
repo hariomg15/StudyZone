@@ -3,8 +3,8 @@ from jose import JWTError, jwt
 from passlib.context import CryptContext
 from app.core.config import settings
 
-# Use bcrypt because it's already included via passlib[bcrypt] in requirements.
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto") 
+# Use passlib's built-in PBKDF2 backend to avoid bcrypt backend issues on some runtimes.
+pwd_context = CryptContext(schemes=["pbkdf2_sha256"], deprecated="auto")
 
 
 def hash_password(password: str) -> str:
