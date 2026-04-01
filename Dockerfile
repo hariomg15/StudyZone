@@ -1,8 +1,8 @@
 FROM python:3.11-slim-bookworm
 
 WORKDIR /app
-# requirements file in repository is 'Requirements.txt' (uppercase R)
-COPY Requirements.txt requirements.txt
+# requirements file in repository is 'requirements.txt' (lowercase r)
+COPY requirements.txt requirements.txt
 
 RUN pip install -r requirements.txt
 
