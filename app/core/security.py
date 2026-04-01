@@ -3,8 +3,8 @@ from jose import JWTError, jwt
 from passlib.context import CryptContext
 from app.core.config import settings
 
-#ye password hashing system setup krta hai
-pwd_context = CryptContext(schemes=["argon2"], deprecated="auto") 
+# Use bcrypt because it's already included via passlib[bcrypt] in requirements.
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto") 
 
 
 def hash_password(password: str) -> str:
