@@ -2,11 +2,12 @@ from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.core.security import hash_password, verify_password, create_access_token
-from app.models.user import User, UserRole
+from app.models.user import UserRole
+from app.repositories import user_repository
 
 
 def register_user(db: Session, user_data):
-    existing_user = db.query(User).filter(User.email == user_data.email).first()
+    existing_user = user_repository.get_user_by_email(db, user_data.email)
     if existing_user:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -21,22 +22,17 @@ def register_user(db: Session, user_data):
 
     hashed_password = hash_password(user_data.password)
 
-    new_user = User(
+    return user_repository.create_user(
+        db,
         name=user_data.name,
         email=user_data.email,
-        password=hashed_password,
+        hashed_password=hashed_password,
         role=user_data.role,
     )
 
-    db.add(new_user)
-    db.commit()
-    db.refresh(new_user)
-
-    return new_user
-
 
 def login_user(db: Session, user_data):
-    user = db.query(User).filter(User.email == user_data.email).first()
+    user = user_repository.get_user_by_email(db, user_data.email)
 
     if not user:
         raise HTTPException(

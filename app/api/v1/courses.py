@@ -29,18 +29,23 @@ def create_course(
 
 @router.get("/", response_model=list[CourseResponse])
 def list_courses(
+    skip: int = Query(0, ge=0),
+    limit: int = Query(10, ge=1, le=100),
     db: Session = Depends(get_db),
     current_user: User | None = Depends(get_current_user_optional),
 ):
-    return course_service.list_courses(db, current_user)
+    return course_service.list_courses(db, current_user, skip=skip, limit=limit)
+
 
 
 @router.get("/search", response_model=list[CourseResponse])
 def search_courses(
     q: str = Query(..., min_length=1),
+    skip: int = Query(0, ge=0),
+    limit: int = Query(10, ge=1, le=100),
     db: Session = Depends(get_db),
 ):
-    return course_service.search_courses(db, q)
+    return course_service.search_courses(db, q, skip=skip, limit=limit)
 
 
 @router.get("/my/created", response_model=list[CourseResponse])

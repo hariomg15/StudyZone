@@ -1,9 +1,8 @@
 from fastapi import HTTPException, status
-from sqlalchemy.orm import Session, joinedload
+from sqlalchemy.orm import Session
 
-from app.models.course import Course
-from app.models.enrollment import Enrollment
 from app.models.user import UserRole
+from app.repositories import course_repository, enrollment_repository
 
 
 def enroll_in_course(db: Session, course_id: int, current_user):
@@ -13,7 +12,7 @@ def enroll_in_course(db: Session, course_id: int, current_user):
             detail="Only students can enroll in courses."
         )
 
-    course = db.query(Course).filter(Course.id == course_id).first()
+    course = course_repository.get_course_by_id(db, course_id)
     if course is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -32,13 +31,10 @@ def enroll_in_course(db: Session, course_id: int, current_user):
             detail="This is not free course. Please complete payment to access it."
         )
 
-    existing_enrollment = (
-        db.query(Enrollment)
-        .filter(
-            Enrollment.user_id == current_user.id,
-            Enrollment.course_id == course_id
-        )
-        .first()
+    existing_enrollment = enrollment_repository.get_enrollment_by_user_and_course(
+        db,
+        current_user.id,
+        course_id,
     )
 
     if existing_enrollment:
@@ -47,13 +43,7 @@ def enroll_in_course(db: Session, course_id: int, current_user):
             detail="You are already enrolled in this course."
         )
 
-    enrollment = Enrollment(user_id=current_user.id, course_id=course_id)
-
-    db.add(enrollment)
-    db.commit()
-    db.refresh(enrollment)
-
-    return enrollment
+    return enrollment_repository.create_enrollment(db, current_user.id, course_id)
 
 
 def get_my_enrollments(db: Session, current_user):
@@ -63,18 +53,11 @@ def get_my_enrollments(db: Session, current_user):
             detail="Only students can view their enrollments."
         )
 
-    enrollments = (
-        db.query(Enrollment)
-        .options(joinedload(Enrollment.course).joinedload(Course.teacher))
-        .filter(Enrollment.user_id == current_user.id)
-        .all()
-    )
-
-    return enrollments
+    return enrollment_repository.get_my_enrollments(db, current_user.id)
 
 
 def get_course_enrollments(db: Session, course_id: int, current_user):
-    course = db.query(Course).filter(Course.id == course_id).first()
+    course = course_repository.get_course_by_id(db, course_id)
 
     if course is None:
         raise HTTPException(
@@ -88,11 +71,4 @@ def get_course_enrollments(db: Session, course_id: int, current_user):
             detail="You do not have permission to view enrollments for this course."
         )
 
-    enrollments = (
-        db.query(Enrollment)
-        .options(joinedload(Enrollment.student))
-        .filter(Enrollment.course_id == course_id)
-        .all()
-    )
-
-    return enrollments
+    return enrollment_repository.get_course_enrollments(db, course_id)

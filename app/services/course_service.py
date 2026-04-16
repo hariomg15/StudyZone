@@ -1,9 +1,8 @@
 from fastapi import HTTPException, status
-from sqlalchemy.orm import Session, joinedload, selectinload
+from sqlalchemy.orm import Session
 
-from app.models.course import Course, Section, Lecture, Note
-from app.models.enrollment import Enrollment
 from app.models.user import UserRole
+from app.repositories import course_repository, enrollment_repository
 
 
 def create_course(db: Session, course_data, current_user):
@@ -16,7 +15,8 @@ def create_course(db: Session, course_data, current_user):
             detail="Price must be greater than 0 for paid courses",
         )
 
-    new_course = Course(
+    created_course = course_repository.create_course(
+        db,
         title=course_data.title,
         description=course_data.description,
         price=course_data.price,
@@ -26,65 +26,24 @@ def create_course(db: Session, course_data, current_user):
         teacher_id=current_user.id,
     )
 
-    db.add(new_course)
-    db.commit()
-    db.refresh(new_course)
-
-    course = (
-        db.query(Course)
-        .options(joinedload(Course.teacher))
-        .filter(Course.id == new_course.id)
-        .first()
-    )
-
-    return course
+    return course_repository.get_course_with_teacher(db, created_course.id)
 
 
-def list_courses(db: Session, current_user=None):
+def list_courses(db: Session, current_user=None, skip: int = 0, limit: int = 10):
     if current_user and current_user.role in [UserRole.teacher, UserRole.admin]:
-        courses = (
-            db.query(Course)
-            .options(joinedload(Course.teacher))
-            .all()
-        )
-    else:
-        courses = (
-            db.query(Course)
-            .options(joinedload(Course.teacher))
-            .filter(Course.is_published == True)
-            .all()
-        )
+        return course_repository.list_all_courses_with_teacher(db, skip=skip, limit=limit)
+    return course_repository.list_published_courses_with_teacher(db, skip=skip, limit=limit)
 
-    return courses
-
-
-def search_courses(db: Session, q: str):
-    courses = (
-        db.query(Course)
-        .options(joinedload(Course.teacher))
-        .filter(
-            Course.is_published == True,
-            Course.title.ilike(f"%{q}%")
-        )
-        .all()
-    )
-
-    return courses
+def search_courses(db: Session, q: str, skip: int = 0, limit: int = 10):
+    return course_repository.search_published_courses(db, q, skip=skip, limit=limit)
 
 
 def get_my_created_courses(db: Session, current_user):
-    courses = (
-        db.query(Course)
-        .options(joinedload(Course.teacher))
-        .filter(Course.teacher_id == current_user.id)
-        .all()
-    )
-
-    return courses
+    return course_repository.get_courses_by_teacher(db, current_user.id)
 
 
 def publish_course(db: Session, course_id: int, current_user):
-    course = db.query(Course).filter(Course.id == course_id).first()
+    course = course_repository.get_course_by_id(db, course_id)
     if not course:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -98,21 +57,12 @@ def publish_course(db: Session, course_id: int, current_user):
         )
 
     course.is_published = True
-    db.commit()
-    db.refresh(course)
-
-    course = (
-        db.query(Course)
-        .options(joinedload(Course.teacher))
-        .filter(Course.id == course_id)
-        .first()
-    )
-
-    return course
+    course_repository.save_course(db, course)
+    return course_repository.get_course_with_teacher(db, course_id)
 
 
 def unpublish_course(db: Session, course_id: int, current_user):
-    course = db.query(Course).filter(Course.id == course_id).first()
+    course = course_repository.get_course_by_id(db, course_id)
     if not course:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -126,26 +76,12 @@ def unpublish_course(db: Session, course_id: int, current_user):
         )
 
     course.is_published = False
-    db.commit()
-    db.refresh(course)
-
-    course = (
-        db.query(Course)
-        .options(joinedload(Course.teacher))
-        .filter(Course.id == course_id)
-        .first()
-    )
-
-    return course
+    course_repository.save_course(db, course)
+    return course_repository.get_course_with_teacher(db, course_id)
 
 
 def get_course(db: Session, course_id: int, current_user=None):
-    course = (
-        db.query(Course)
-        .options(joinedload(Course.teacher))
-        .filter(Course.id == course_id)
-        .first()
-    )
+    course = course_repository.get_course_with_teacher(db, course_id)
 
     if not course:
         raise HTTPException(
@@ -167,7 +103,7 @@ def get_course(db: Session, course_id: int, current_user=None):
 
 
 def update_course(db: Session, course_id: int, course_data, current_user):
-    course = db.query(Course).filter(Course.id == course_id).first()
+    course = course_repository.get_course_by_id(db, course_id)
     if not course:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -194,21 +130,12 @@ def update_course(db: Session, course_id: int, course_data, current_user):
     for field, value in update_data.items():
         setattr(course, field, value)
 
-    db.commit()
-    db.refresh(course)
-
-    course = (
-        db.query(Course)
-        .options(joinedload(Course.teacher))
-        .filter(Course.id == course_id)
-        .first()
-    )
-
-    return course
+    course_repository.save_course(db, course)
+    return course_repository.get_course_with_teacher(db, course_id)
 
 
 def delete_course(db: Session, course_id: int, current_user):
-    course = db.query(Course).filter(Course.id == course_id).first()
+    course = course_repository.get_course_by_id(db, course_id)
     if not course:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -221,14 +148,13 @@ def delete_course(db: Session, course_id: int, current_user):
             detail="Not authorized to delete this course",
         )
 
-    db.delete(course)
-    db.commit()
+    course_repository.delete_course(db, course)
 
     return "deleted"
 
 
 def create_section(db: Session, course_id: int, section_data, current_user):
-    course = db.query(Course).filter(Course.id == course_id).first()
+    course = course_repository.get_course_by_id(db, course_id)
     if course is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -241,21 +167,16 @@ def create_section(db: Session, course_id: int, section_data, current_user):
             detail="Not authorized to add section to this course",
         )
 
-    new_section = Section(
+    return course_repository.create_section(
+        db,
         course_id=course_id,
         title=section_data.title,
         order_num=section_data.order_num,
     )
 
-    db.add(new_section)
-    db.commit()
-    db.refresh(new_section)
-
-    return new_section
-
 
 def add_lecture(db: Session, section_id: int, lecture_data, current_user):
-    section = db.query(Section).filter(Section.id == section_id).first()
+    section = course_repository.get_section_by_id(db, section_id)
     if section is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -268,24 +189,19 @@ def add_lecture(db: Session, section_id: int, lecture_data, current_user):
             detail="Not authorized to add lecture to this section",
         )
 
-    lecture = Lecture(
+    return course_repository.create_lecture(
+        db,
+        section_id=section_id,
         title=lecture_data.title,
         video_url=lecture_data.video_url,
         duration=lecture_data.duration,
         is_preview=lecture_data.is_preview,
         order_num=lecture_data.order_num,
-        section_id=section_id,
     )
-
-    db.add(lecture)
-    db.commit()
-    db.refresh(lecture)
-
-    return lecture
 
 
 def add_note(db: Session, section_id: int, note_data, current_user):
-    section = db.query(Section).filter(Section.id == section_id).first()
+    section = course_repository.get_section_by_id(db, section_id)
     if section is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -298,29 +214,16 @@ def add_note(db: Session, section_id: int, note_data, current_user):
             detail="Not authorized to add note to this section",
         )
 
-    note = Note(
+    return course_repository.create_note(
+        db,
+        section_id=section_id,
         title=note_data.title,
         pdf_url=note_data.pdf_url,
-        section_id=section_id,
     )
-
-    db.add(note)
-    db.commit()
-    db.refresh(note)
-
-    return note
 
 
 def get_course_content(db: Session, course_id: int, current_user=None):
-    course = (
-        db.query(Course)
-        .options(
-            selectinload(Course.sections).selectinload(Section.lectures),
-            selectinload(Course.sections).selectinload(Section.notes),
-        )
-        .filter(Course.id == course_id)
-        .first()
-    )
+    course = course_repository.get_course_with_content(db, course_id)
 
     if course is None:
         raise HTTPException(
@@ -355,13 +258,10 @@ def get_course_content(db: Session, course_id: int, current_user=None):
             )
         return course
 
-    enrollment = (
-        db.query(Enrollment)
-        .filter(
-            Enrollment.course_id == course_id,
-            Enrollment.user_id == current_user.id,
-        )
-        .first()
+    enrollment = enrollment_repository.get_enrollment_by_user_and_course(
+        db,
+        current_user.id,
+        course_id,
     )
 
     if enrollment is None:
